@@ -1,16 +1,59 @@
-# Image-to-Prompt Tool
+# Image → Prompt Tool
 
-Werkzeug zur Analyse von Referenzbildern und zur Erzeugung detaillierter, wiederverwendbarer Bild-Prompts.
+Ein kleines lokales Windows-Tool, das aus einem Bild einen einstellbar langen Prompt und optional einen Negative Prompt erstellt.
 
-## Geplanter Kern
+## Funktionen
 
-- Bild hochladen oder per Drag-and-drop einfügen
-- Referenzbild direkt anzeigen
-- optionale Vorgaben für Stil, Motiv und Ausgabe ergänzen
-- strukturierten Prompt erzeugen
-- Ergebnis kopieren und exportieren
-- API-Schlüssel ausschließlich serverseitig verwenden
+- Bild hochladen: PNG, JPG/JPEG, WEBP, GIF
+- Prompt-Laenge: Kurz, Mittel, Lang, Sehr lang
+- Zielformat: Stable Diffusion / SDXL, FLUX, Midjourney, Allgemein
+- Look: Amateurfoto, professionelles Foto, dokumentarisch, Studio
+- Optionaler fixer Charakter-/Triggerblock
+- Zusatzregeln fuer Szene, Kamera, Licht, Pose usw.
+- Ganzkoerper-/Distanz-Fix gegen Close-ups
+- Optionaler Fingernagel-Fix: natuerlich, kurz, keine kuenstlichen Naegel
+- OpenAI API oder lokales Ollama-Vision-Modell
 
-## Status
+## Installation Windows
 
-Das GitHub-Projekt ist eingerichtet. Der vorhandene Projektstand beziehungsweise die ursprünglichen Quelldateien müssen als Nächstes übernommen werden. Bis dahin wird hier bewusst kein erfundener Ersatzstand als fertige Anwendung ausgegeben.
+1. Ordner entpacken.
+2. `install.bat` starten.
+3. Danach `run.bat` starten.
+4. Browser oeffnet Streamlit lokal.
+
+## OpenAI API nutzen
+
+In Windows CMD:
+
+```bat
+setx OPENAI_API_KEY "dein_api_key"
+```
+
+Danach CMD/PowerShell neu oeffnen und `run.bat` starten.
+
+## Ollama lokal nutzen
+
+1. Ollama installieren.
+2. Ein Vision-Modell installieren.
+3. Im Tool `Ollama lokal` auswaehlen und Modellnamen eintragen.
+
+Beispiel:
+
+```bat
+ollama pull llava
+```
+
+Danach im Tool Modell `llava:latest` verwenden.
+
+## Tipp fuer Fitnessstudio-Prompts
+
+Aktiviere:
+
+- Ganzkoerper staerker erzwingen
+- Close-up/Portrait vermeiden
+
+Und schreibe in Zusatzregeln z. B.:
+
+```text
+realistic gym training, standing rear three-quarter view using a cable machine, full body visible, camera 5m away, normal gym lighting, amateur smartphone photo
+```
