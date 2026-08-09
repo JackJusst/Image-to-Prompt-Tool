@@ -2,8 +2,12 @@ import base64
 import json
 import os
 import re
+import shutil
+import subprocess
+import time
 from io import BytesIO
 from typing import Dict, Tuple
+from urllib.parse import urlparse
 
 import requests
 import streamlit as st
@@ -18,6 +22,7 @@ except Exception:
 APP_TITLE = "Image → Prompt Tool"
 DEFAULT_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llava:latest")
+OLLAMA_START_TIMEOUT = 20
 
 LENGTHS = {
     "Kurz": "45-70 words, compact, only important visual facts",
@@ -171,6 +176,93 @@ def call_openai(data_url: str, instruction: str, model: str) -> Dict:
     return clean_json(response.output_text)
 
 
+def is_local_ollama_host(host: str) -> bool:
+    parsed = urlparse(host if "://" in host else f"http://{host}")
+    return parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+def get_ollama_models(host: str) -> Dict:
+    resp = requests.get(host.rstrip("/") + "/api/tags", timeout=3)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ollama_model_is_installed(models: Dict, model: str) -> bool:
+    wanted = model.strip()
+    wanted_with_tag = wanted if ":" in wanted else f"{wanted}:latest"
+    installed = {
+        item.get("name") or item.get("model")
+        for item in models.get("models", [])
+    }
+    return wanted in installed or wanted_with_tag in installed
+
+
+def start_local_ollama(host: str) -> None:
+    if not is_local_ollama_host(host):
+        raise RuntimeError(
+            f"Ollama unter {host} ist nicht erreichbar. Ein entfernter Ollama-Server kann nicht automatisch gestartet werden."
+        )
+
+    ollama_exe = shutil.which("ollama")
+    if not ollama_exe:
+        raise RuntimeError(
+            "Ollama ist nicht installiert oder nicht im Windows-PATH. Installiere Ollama einmalig und starte danach dieses Tool erneut."
+        )
+
+    popen_options = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if os.name == "nt":
+        popen_options["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    subprocess.Popen([ollama_exe, "serve"], **popen_options)
+
+    deadline = time.monotonic() + OLLAMA_START_TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            get_ollama_models(host)
+            return
+        except requests.RequestException:
+            time.sleep(0.5)
+
+    raise RuntimeError(
+        "Ollama wurde gestartet, antwortet aber noch nicht. Warte kurz und versuche es erneut."
+    )
+
+
+def pull_ollama_model(host: str, model: str) -> None:
+    resp = requests.post(
+        host.rstrip("/") + "/api/pull",
+        json={"name": model, "stream": False},
+        timeout=(10, 3600),
+    )
+    resp.raise_for_status()
+
+
+def ensure_ollama_ready(host: str, model: str) -> Tuple[bool, bool]:
+    started = False
+    pulled = False
+
+    try:
+        models = get_ollama_models(host)
+    except requests.RequestException:
+        start_local_ollama(host)
+        started = True
+        models = get_ollama_models(host)
+
+    if not ollama_model_is_installed(models, model):
+        if not is_local_ollama_host(host):
+            raise RuntimeError(
+                f"Das Modell {model} fehlt auf dem entfernten Ollama-Server."
+            )
+        pull_ollama_model(host, model)
+        pulled = True
+
+    return started, pulled
+
+
 def call_ollama(image_bytes: bytes, instruction: str, model: str, host: str) -> Dict:
     encoded = base64.b64encode(image_bytes).decode("utf-8")
     url = host.rstrip("/") + "/api/generate"
@@ -222,7 +314,7 @@ def main():
 
     with st.sidebar:
         st.header("Einstellungen")
-        provider = st.selectbox("KI-Anbindung", ["OpenAI API", "Ollama lokal"])
+        provider = st.selectbox("KI-Anbindung", ["Ollama lokal", "OpenAI API"])
         if provider == "OpenAI API":
             model = st.text_input("OpenAI Modell", value=DEFAULT_OPENAI_MODEL)
             st.caption("API-Key wird aus OPENAI_API_KEY gelesen.")
@@ -230,6 +322,14 @@ def main():
         else:
             model = st.text_input("Ollama Vision-Modell", value=DEFAULT_OLLAMA_MODEL)
             ollama_host = st.text_input("Ollama Host", value="http://localhost:11434")
+            try:
+                models = get_ollama_models(ollama_host)
+                if ollama_model_is_installed(models, model):
+                    st.success("Ollama und Modell sind bereit.")
+                else:
+                    st.info("Das Modell wird beim ersten Prompt automatisch heruntergeladen.")
+            except requests.RequestException:
+                st.info("Ollama wird beim ersten Prompt automatisch gestartet.")
 
         target = st.selectbox("Zielformat", list(TARGETS.keys()), index=0)
         length_label = st.select_slider("Prompt-Länge", options=list(LENGTHS.keys()), value="Mittel")
@@ -285,6 +385,11 @@ def main():
                     if provider == "OpenAI API":
                         result = call_openai(data_url, instruction, model)
                     else:
+                        started, pulled = ensure_ollama_ready(ollama_host, model)
+                        if started:
+                            st.toast("Ollama wurde automatisch gestartet.")
+                        if pulled:
+                            st.toast(f"Ollama-Modell {model} wurde installiert.")
                         result = call_ollama(image_bytes, instruction, model, ollama_host)
 
                     positive = result.get("positive_prompt", "").strip()
