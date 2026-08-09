@@ -21,6 +21,9 @@ Ein kleines lokales Windows-Tool, das aus einem Bild einen einstellbar langen Pr
 3. Danach `run.bat` starten.
 4. Browser oeffnet Streamlit lokal.
 
+`run.bat` startet Ollama automatisch im Hintergrund. Wird Ollama erst beim
+Erzeugen des Prompts benoetigt, startet das Tool den Dienst ebenfalls selbst.
+
 ## OpenAI API nutzen
 
 In Windows CMD:
@@ -33,11 +36,16 @@ Danach CMD/PowerShell neu oeffnen und `run.bat` starten.
 
 ## Ollama lokal nutzen
 
-1. Ollama installieren.
-2. Ein Vision-Modell installieren.
-3. Im Tool `Ollama lokal` auswaehlen und Modellnamen eintragen.
+1. Ollama einmalig installieren.
+2. `run.bat` starten.
+3. Im Tool `Ollama lokal` auswaehlen und den Prompt erzeugen.
 
-Beispiel:
+Das voreingestellte Vision-Modell `llava:latest` wird beim ersten Prompt
+automatisch heruntergeladen. Der erste Start kann deshalb je nach Verbindung
+laenger dauern. Danach sind weder `ollama serve` noch `ollama pull` von Hand
+noetig.
+
+Optional kann ein anderes Vision-Modell weiterhin von Hand installiert werden:
 
 ```bat
 ollama pull llava
