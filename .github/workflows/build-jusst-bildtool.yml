@@ -1,0 +1,59 @@
+name: Build Jusst BildTool
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'JusstBildTool/**'
+      - '.github/workflows/build-jusst-bildtool.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r JusstBildTool/requirements.txt
+
+      - name: Download Real-ESRGAN
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip'
+          Invoke-WebRequest -Uri $url -OutFile realesrgan.zip
+          New-Item -ItemType Directory -Force -Path JusstBildTool/realesrgan | Out-Null
+          Expand-Archive realesrgan.zip -DestinationPath JusstBildTool/realesrgan -Force
+          $exe = Get-ChildItem JusstBildTool/realesrgan -Filter realesrgan-ncnn-vulkan.exe -Recurse | Select-Object -First 1
+          if ($exe -and $exe.DirectoryName -ne (Resolve-Path JusstBildTool/realesrgan).Path) {
+            Copy-Item "$($exe.DirectoryName)/*" JusstBildTool/realesrgan -Recurse -Force
+          }
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name JusstBildTool `
+            --collect-all cv2 `
+            --add-data "JusstBildTool/realesrgan;realesrgan" `
+            JusstBildTool/JusstBildTool.py
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist/JusstBildTool.exe package/JusstBildTool.exe
+          Compress-Archive -Path package/* -DestinationPath JusstBildTool_Windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JusstBildTool_Windows
+          path: JusstBildTool_Windows.zip
+          if-no-files-found: error
